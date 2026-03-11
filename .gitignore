@@ -1,0 +1,17 @@
+build/
+*.obj
+*.exe
+*.ilk
+*.pdb
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.tlog
+*.lastbuildstate
+*.recipe
+*.log
+*.dir/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
