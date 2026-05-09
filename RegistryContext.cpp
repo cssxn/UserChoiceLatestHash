@@ -9,6 +9,9 @@ const wchar_t *kSalt97B6 =
 const wchar_t *kSaltD185 =
     L"Copyright (C) Microsoft. All rights reserved {D185E0A1-E265-4724-AA21-3A17B038D72E}";
 
+const wchar_t *kUserExperience =
+    L"User Choice set via Windows User Experience {D18B6DD5-6124-4341-9318-804003BAFA0B}";
+
 bool QueryRegString(HKEY root, const std::wstring &subkey, const wchar_t *value_name, std::wstring *out)
 {
     HKEY key = NULL;
@@ -116,6 +119,26 @@ bool FormatTimestampHexFromFileTime(const FILETIME &last_write, std::wstring *ou
     return true;
 }
 
+bool FormatTimestampHexMinuteRounded(const FILETIME &last_write, std::wstring *out)
+{
+    SYSTEMTIME st;
+    FILETIME normalized;
+    if (!FileTimeToSystemTime(&last_write, &st))
+    {
+        return false;
+    }
+    st.wSecond = 0;
+    st.wMilliseconds = 0;
+    if (!SystemTimeToFileTime(&st, &normalized))
+    {
+        return false;
+    }
+    wchar_t buffer[17];
+    swprintf(buffer, sizeof(buffer) / sizeof(buffer[0]), L"%08x%08x", normalized.dwHighDateTime, normalized.dwLowDateTime);
+    *out = buffer;
+    return true;
+}
+
 const wchar_t *PrimarySaltForClass(int mod_class)
 {
     if (mod_class == 0)
@@ -162,6 +185,19 @@ std::wstring BuildCanonicalInput(const UserChoiceLatestHash::AssocContext &ctx, 
     return result;
 }
 
+std::wstring BuildCanonicalInputUserChoice(const UserChoiceLatestHash::AssocContext &ctx)
+{
+    // SFTA.ps1 format: assoc + sid + progid + timestamp + experience
+    // Fixed order, no salt, no mod_class
+    std::wstring result;
+    result += ctx.assoc;
+    result += ctx.sid;
+    result += ctx.progid;
+    result += ctx.timestamp_hex;
+    result += kUserExperience;
+    return result;
+}
+
 bool LoadAssociationContext(const std::wstring &assoc, UserChoiceLatestHash::AssocContext *ctx)
 {
     ctx->assoc = assoc;
@@ -203,23 +239,38 @@ bool LoadAssociationContext(const std::wstring &assoc, UserChoiceLatestHash::Ass
         return false;
     }
 
-    const std::wstring progid_key = ctx->base_key + L"\\" + ctx->choice_name + L"\\ProgId";
-    if (!QueryRegString(HKEY_CURRENT_USER, progid_key, L"ProgId", &ctx->progid)
-        && !QueryRegString(HKEY_CURRENT_USER, ctx->base_key + L"\\" + ctx->choice_name, L"ProgId", &ctx->progid))
+    const std::wstring user_choice_key = ctx->base_key + L"\\" + ctx->choice_name;
+    const std::wstring progid_key = user_choice_key + L"\\ProgId";
+    if (!QueryRegString(HKEY_CURRENT_USER, user_choice_key, L"ProgId", &ctx->progid)
+        && !QueryRegString(HKEY_CURRENT_USER, progid_key, L"ProgId", &ctx->progid))
     {
         return false;
     }
 
     FILETIME last_write;
-    if (!QueryRegLastWriteTime(HKEY_CURRENT_USER, progid_key, &last_write)
-        && !QueryRegLastWriteTime(HKEY_CURRENT_USER, ctx->base_key + L"\\" + ctx->choice_name, &last_write))
+    if (!QueryRegLastWriteTime(HKEY_CURRENT_USER, user_choice_key, &last_write)
+        && !QueryRegLastWriteTime(HKEY_CURRENT_USER, progid_key, &last_write))
     {
         return false;
     }
 
-    if (!FormatTimestampHexFromFileTime(last_write, &ctx->timestamp_hex))
+    ctx->last_write_raw = last_write;
+
+    // UserChoice: minute-rounded timestamp (matching SFTA.ps1 Get-HexDateTime)
+    // UserChoiceLatest: SYSTEMTIME-normalized timestamp (existing behavior)
+    if (ctx->choice_name == L"UserChoice")
     {
-        return false;
+        if (!FormatTimestampHexMinuteRounded(last_write, &ctx->timestamp_hex))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        if (!FormatTimestampHexFromFileTime(last_write, &ctx->timestamp_hex))
+        {
+            return false;
+        }
     }
 
     ctx->mod_class = static_cast<int>(ctx->machine_id_trimmed[ctx->machine_id_trimmed.size() - 1U] % 3);
@@ -263,10 +314,21 @@ bool VerifyCurrentAssociation(const std::wstring &assoc,
         return false;
     }
 
-    ctx->canonical_primary = BuildCanonicalInput(*ctx, PrimarySaltForClass(ctx->mod_class));
-    if (!UserChoiceLatestHash::ComputeHash(ctx->canonical_primary, seeds, false, &ctx->computed_primary, NULL))
+    if (ctx->choice_name == L"UserChoiceLatest")
     {
-        return false;
+        ctx->canonical_primary = BuildCanonicalInput(*ctx, PrimarySaltForClass(ctx->mod_class));
+        if (!UserChoiceLatestHash::ComputeHash(ctx->canonical_primary, seeds, false, &ctx->computed_primary, NULL))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        ctx->canonical_primary = BuildCanonicalInputUserChoice(*ctx);
+        if (!UserChoiceLatestHash::ComputeHashUserChoice(ctx->canonical_primary, false, &ctx->computed_primary, NULL))
+        {
+            return false;
+        }
     }
 
     return true;

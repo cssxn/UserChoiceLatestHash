@@ -92,6 +92,7 @@ struct AssocContext
     std::wstring canonical_alternate;
     std::wstring computed_primary;
     std::wstring computed_alternate;
+    FILETIME last_write_raw;
     int mod_class;
     bool alternate_used;
 };
@@ -108,6 +109,11 @@ bool ComputeHash(const std::wstring &canonical_input,
                  bool lowercase_output,
                  std::wstring *out_hash,
                  DebugData *debug_data);
+
+bool ComputeHashUserChoice(const std::wstring &canonical_input,
+                           bool lowercase_output,
+                           std::wstring *out_hash,
+                           DebugData *debug_data);
 
 void ApplyLicenseNameShaMix(const U32 base_a[4],
                             const U32 base_b[4],

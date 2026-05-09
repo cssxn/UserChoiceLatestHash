@@ -698,6 +698,88 @@ void ApplyLicenseNameShaMix(const U32 base_a[4],
     out->b[3] ^= w3;
 }
 
+bool ComputeHashUserChoice(const std::wstring &canonical_input,
+                           bool lowercase_output,
+                           std::wstring *out_hash,
+                           DebugData *debug_data)
+{
+    if (out_hash == NULL)
+    {
+        return false;
+    }
+
+    WorkingSeeds seeds;
+    LoadProvidedSeeds(&seeds);
+
+    const std::wstring lowered = ToLowerWide(canonical_input);
+    const size_t char_count = lowered.size();
+
+    // UTF-16LE encode + null terminator (matching SFTA.ps1: $bytesBaseInfo += 0x00, 0x00)
+    std::vector<U8> bytes((char_count + 1U) * 2U, 0U);
+    memcpy(&bytes[0], lowered.c_str(), char_count * 2U);
+
+    U32 md5_words[4] = { 0U, 0U, 0U, 0U };
+    if (!Md5Raw(&bytes[0], static_cast<DWORD>(bytes.size()), md5_words))
+    {
+        return false;
+    }
+    if (debug_data != NULL)
+    {
+        debug_data->packed_words.clear();
+        memcpy(debug_data->md5_words, md5_words, sizeof(md5_words));
+    }
+
+    const int byte_len = static_cast<int>(bytes.size());
+    const int dword_len = byte_len >> 2;
+    const int mix_count = ((byte_len & 4) == 0) ? dword_len : (dword_len - 1);
+
+    std::vector<U32> dwords(dword_len, 0U);
+    for (int i = 0; i < dword_len; ++i)
+    {
+        dwords[i] = ReadLe32(&bytes[i * 4]);
+    }
+
+    U32 pair_a[2] = { 0U, 0U };
+    U32 pair_b[2] = { 0U, 0U };
+    if (mix_count >= 2)
+    {
+        MixA(&dwords[0], mix_count, md5_words, seeds.a, pair_a);
+        MixB(&dwords[0], mix_count, md5_words, seeds.b, pair_b);
+    }
+    if (debug_data != NULL)
+    {
+        debug_data->pair_a[0] = pair_a[0];
+        debug_data->pair_a[1] = pair_a[1];
+        debug_data->pair_b[0] = pair_b[0];
+        debug_data->pair_b[1] = pair_b[1];
+    }
+
+    BYTE final8[8];
+    const U32 low = pair_a[0] ^ pair_b[0];
+    const U32 high = pair_a[1] ^ pair_b[1];
+    final8[0] = static_cast<BYTE>(low & 0xFFU);
+    final8[1] = static_cast<BYTE>((low >> 8) & 0xFFU);
+    final8[2] = static_cast<BYTE>((low >> 16) & 0xFFU);
+    final8[3] = static_cast<BYTE>((low >> 24) & 0xFFU);
+    final8[4] = static_cast<BYTE>(high & 0xFFU);
+    final8[5] = static_cast<BYTE>((high >> 8) & 0xFFU);
+    final8[6] = static_cast<BYTE>((high >> 16) & 0xFFU);
+    final8[7] = static_cast<BYTE>((high >> 24) & 0xFFU);
+
+    std::wstring hash;
+    if (!Base64NoCrLf(final8, sizeof(final8), &hash))
+    {
+        return false;
+    }
+    if (lowercase_output)
+    {
+        hash = ToLowerWide(hash);
+    }
+
+    *out_hash = hash;
+    return true;
+}
+
 bool ComputeHash(const std::wstring &canonical_input,
                  const WorkingSeeds &seeds,
                  bool lowercase_output,

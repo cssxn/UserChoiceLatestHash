@@ -22,7 +22,11 @@ From this directory:
 ```bat
 cmd /c "call \"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat\" >nul && cl /nologo /EHsc /W4 /TP /c main.cpp HashTables.cpp HashCodec.cpp RegistryContext.cpp Cli.cpp && link /NOLOGO /OUT:UserChoiceLatestHash.exe main.obj HashTables.obj HashCodec.obj RegistryContext.obj Cli.obj advapi32.lib crypt32.lib"
 ```
+Or use the provided one-click packaging script:
 
+```bat
+build_msvc.bat
+```
 ## Usage
 
 ### 1. Debug one canonical input
