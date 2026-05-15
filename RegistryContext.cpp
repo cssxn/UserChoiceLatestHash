@@ -185,23 +185,19 @@ bool LoadAssociationContext(const std::wstring &assoc, UserChoiceLatestHash::Ass
         ? L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\"
         : L"Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\";
     const std::wstring base = prefix + assoc;
-    const wchar_t *choices[2] = { L"UserChoiceLatest", L"UserChoice" };
+   
 
-    size_t index = 0U;
-    for (; index < 2U; ++index)
-    {
-        std::wstring choice_key = base + L"\\" + choices[index];
-        if (QueryRegString(HKEY_CURRENT_USER, choice_key, L"Hash", &ctx->registry_hash))
-        {
-            ctx->base_key = base;
-            ctx->choice_name = choices[index];
-            break;
-        }
-    }
-    if (index == 2U)
-    {
-        return false;
-    }
+    std::wstring choice_key = base + L"\\UserChoiceLatest";
+	if (QueryRegString(HKEY_CURRENT_USER, choice_key, L"Hash", &ctx->registry_hash))
+	{
+		ctx->base_key = base;
+		ctx->choice_name = L"UserChoiceLatest";
+	}
+	else
+	{
+		return false;
+	}
+    
 
     const std::wstring progid_key = ctx->base_key + L"\\" + ctx->choice_name + L"\\ProgId";
     if (!QueryRegString(HKEY_CURRENT_USER, progid_key, L"ProgId", &ctx->progid)
