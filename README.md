@@ -63,9 +63,6 @@ It then builds the canonical input string, computes the expected hash, and compa
 
 - `UserChoiceLatest`
 
-and falls back to:
-
-- `UserChoice`
 
 ## Current assumptions
 
@@ -102,7 +99,7 @@ UserChoiceLatestHash.exe -verify .pdd
 Typical fields in the output:
 
 - `choice`
-  Shows whether the tool matched `UserChoiceLatest` or fell back to `UserChoice`.
+  Shows whether the tool matched `UserChoiceLatest`.
 - `registry_hash`
   The current hash stored in the registry.
 - `computed_hash`
